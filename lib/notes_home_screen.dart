@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 
 class NotesHomeScreen extends StatefulWidget {
-  const NotesHomeScreen({Key? key}) : super(key: key);
+  const NotesHomeScreen({super.key});
 
   @override
   State<NotesHomeScreen> createState() => _NotesHomeScreenState();
@@ -10,14 +11,42 @@ class NotesHomeScreen extends StatefulWidget {
 class _NotesHomeScreenState extends State<NotesHomeScreen> {
   final List<Map<String, dynamic>> _notes = [];
 
+  @override
+  void initState() {
+    super.initState();
+    _loadNotesFromHive();
+  }
+
+  void _loadNotesFromHive() {
+    final box = Hive.box('notesBox');
+    final loadedNotes = box.values.toList();
+
+    setState(() {
+      _notes.clear();
+      _notes.addAll(
+        loadedNotes.map(
+          (note) => {
+            'title': note['title'],
+            'content': note['content'],
+            'color': note['color'] != null
+                ? Color(note['color'] as int) // ✅ convert int → Color
+                : Colors.white,
+            'created': note['created'],
+          },
+        ),
+      );
+    });
+  }
+
   void _navigateToEditor() async {
     final newNote = await Navigator.pushNamed(context, '/edit');
 
-    print("Received note: $newNote"); // 🔍
-
     if (newNote != null && newNote is Map<String, dynamic>) {
       setState(() {
-        _notes.insert(0, newNote);
+        _notes.insert(0, {
+          ...newNote,
+          'color': Color(newNote['color'] as int), // ✅ fix here too
+        });
       });
     }
   }

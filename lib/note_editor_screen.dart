@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 
 class NoteEditorScreen extends StatefulWidget {
   const NoteEditorScreen({super.key});
@@ -11,21 +12,23 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
 
-  void _saveNote() {
+  Future<void> _saveNote() async {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
 
-    if (title.isEmpty) return;
+    if (title.isEmpty && content.isEmpty) return;
 
     final note = {
       'title': title,
       'content': content,
-      'color': _getRandomColor(),
+      'color': _getRandomColor().value, // store as int
+      'created': DateTime.now().toIso8601String(),
     };
 
-    print("Saving note: $note"); // Debug log
+    final box = Hive.box('notesBox');
+    await box.add(note);
 
-    Navigator.pop(context, note);
+    Navigator.pop(context, note); // return to home with new note
   }
 
   Color _getRandomColor() {
