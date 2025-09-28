@@ -12,23 +12,58 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
 
+  int? _noteKey; // ✅ if editing, keep track of Hive key
+  late Color _noteColor;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args != null && args is Map<String, dynamic>) {
+      // Editing existing note
+      _noteKey = args['key'];
+      _titleController.text = args['title'] ?? '';
+      _contentController.text = args['content'] ?? '';
+      _noteColor = args['color'] as Color;
+    } else {
+      // New note
+      _noteColor = _getRandomColor();
+    }
+  }
+
   Future<void> _saveNote() async {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
 
     if (title.isEmpty && content.isEmpty) return;
 
+    final box = Hive.box('notesBox');
+
     final note = {
       'title': title,
       'content': content,
-      'color': _getRandomColor().value, // store as int
+      'color': _noteColor.value, // ✅ always save as int
       'created': DateTime.now().toIso8601String(),
     };
 
-    final box = Hive.box('notesBox');
-    await box.add(note);
-
-    Navigator.pop(context, note); // return to home with new note
+    if (_noteKey != null) {
+      // ✅ Update existing note
+      await box.put(_noteKey, note);
+      Navigator.pop(context, {
+        ...note,
+        'key': _noteKey,
+        'color': _noteColor, // pass back as Color
+      });
+    } else {
+      // ✅ Add new note
+      final newKey = await box.add(note);
+      Navigator.pop(context, {
+        ...note,
+        'key': newKey,
+        'color': _noteColor, // pass back as Color
+      });
+    }
   }
 
   Color _getRandomColor() {
@@ -54,17 +89,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         backgroundColor: Colors.black87,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.remove_red_eye, color: Colors.white),
-            onPressed: () {
-              // Preview logic (not implemented)
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.save_alt, color: Colors.white),
             onPressed: _saveNote,
@@ -97,72 +124,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            _buildToolbar(),
           ],
         ),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.only(bottom: 12.0, right: 12.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            FloatingActionButton(
-              backgroundColor: Colors.teal,
-              onPressed: _saveNote,
-              child: const Icon(Icons.send, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToolbar() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: const [
-          IconButton(
-            icon: Icon(Icons.format_bold, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.format_italic, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.format_underline, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.link, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.format_list_bulleted, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.format_list_numbered, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.code, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.format_quote, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.title, color: Colors.white),
-            onPressed: null,
-          ),
-          IconButton(
-            icon: Icon(Icons.image, color: Colors.white),
-            onPressed: null,
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.teal,
+        onPressed: _saveNote,
+        child: const Icon(Icons.send, color: Colors.white),
       ),
     );
   }

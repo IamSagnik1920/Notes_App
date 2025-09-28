@@ -17,38 +17,67 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
     _loadNotesFromHive();
   }
 
+  /// Load notes from Hive
   void _loadNotesFromHive() {
     final box = Hive.box('notesBox');
-    final loadedNotes = box.values.toList();
-
-    setState(() {
-      _notes.clear();
-      _notes.addAll(
-        loadedNotes.map(
-          (note) => {
-            'title': note['title'],
-            'content': note['content'],
+    final loadedNotes = box.keys
+        .map((key) {
+          final note = box.get(key);
+          return {
+            'key': key, // Hive key for edit/delete
+            'title': note['title'] ?? '',
+            'content': note['content'] ?? '',
             'color': note['color'] != null
-                ? Color(note['color'] as int) // ✅ convert int → Color
+                ? Color(note['color'] as int) // convert back to Color
                 : Colors.white,
             'created': note['created'],
-          },
-        ),
-      );
+          };
+        })
+        .toList()
+        .reversed
+        .toList();
+
+    setState(() {
+      _notes
+        ..clear()
+        ..addAll(loadedNotes);
     });
   }
 
-  void _navigateToEditor() async {
-    final newNote = await Navigator.pushNamed(context, '/edit');
+  /// Add or Edit
+  void _navigateToEditor({Map<String, dynamic>? note}) async {
+    final result = await Navigator.pushNamed(context, '/edit', arguments: note);
 
-    if (newNote != null && newNote is Map<String, dynamic>) {
-      setState(() {
-        _notes.insert(0, {
-          ...newNote,
-          'color': Color(newNote['color'] as int), // ✅ fix here too
+    if (result != null && result is Map<String, dynamic>) {
+      final box = Hive.box('notesBox');
+
+      if (note != null) {
+        // ✅ Update existing note
+        await box.put(note['key'], {
+          'title': result['title'],
+          'content': result['content'],
+          'color': (result['color'] as Color).value, // store as int
+          'created': note['created'],
         });
-      });
+      } else {
+        // ✅ Add new note
+        await box.add({
+          'title': result['title'],
+          'content': result['content'],
+          'color': (result['color'] as Color).value, // store as int
+          'created': result['created'],
+        });
+      }
+
+      _loadNotesFromHive(); // refresh UI
     }
+  }
+
+  /// Delete
+  void _deleteNote(int key) async {
+    final box = Hive.box('notesBox');
+    await box.delete(key);
+    _loadNotesFromHive();
   }
 
   @override
@@ -61,30 +90,19 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
         backgroundColor: Colors.black87,
         elevation: 0,
         title: const Text(
-          'Notes',
+          'My Notes',
           style: TextStyle(fontSize: 28, color: Colors.white),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: Colors.white),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: isEmpty ? _buildEmptyState() : _buildNotesList(),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.black87,
-        onPressed: _navigateToEditor,
+        backgroundColor: Colors.teal,
+        onPressed: () => _navigateToEditor(),
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
 
-  /// Widget when no notes are present
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -109,7 +127,6 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
     );
   }
 
-  /// Widget to show list of notes
   Widget _buildNotesList() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -118,15 +135,14 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
         itemBuilder: (context, index) {
           final note = _notes[index];
           return GestureDetector(
-            onTap: () {
-              // In future: navigate to detail/edit
-            },
+            onTap: () => _navigateToEditor(note: note), // Edit on tap
+            onLongPress: () => _showNoteOptions(note), // Long press options
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                color: note['color'],
+                color: note['color'] as Color,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -136,6 +152,46 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Dialog with Edit/Delete
+  void _showNoteOptions(Map<String, dynamic> note) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.black87,
+        title: const Text(
+          "Note Options",
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          "Choose an action",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _navigateToEditor(note: note);
+            },
+            child: const Text(
+              "Edit",
+              style: TextStyle(color: Colors.tealAccent),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteNote(note['key']);
+            },
+            child: const Text(
+              "Delete",
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
       ),
     );
   }
